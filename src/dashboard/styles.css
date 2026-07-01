@@ -1,0 +1,81 @@
+:root {
+  --etg-bg: #0f1115;
+  --etg-panel: #171a21;
+  --etg-border: #262b36;
+  --etg-text: #e6e8ee;
+  --etg-muted: #9aa3b2;
+  --etg-accent: #4f46e5;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--etg-bg);
+  color: var(--etg-text);
+  font:
+    14px/1.5 system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
+}
+
+.etg-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.etg-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--etg-border);
+}
+
+.etg-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.etg-tagline {
+  margin: 4px 0 0;
+  color: var(--etg-muted);
+  font-size: 13px;
+}
+
+.etg-panes {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--etg-border);
+}
+
+.etg-pane {
+  background: var(--etg-panel);
+  padding: 16px 20px;
+  overflow: auto;
+}
+
+.etg-pane__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.etg-pane__hint {
+  margin: 0;
+  color: var(--etg-muted);
+}
+
+.etg-favicon {
+  border-radius: 3px;
+  vertical-align: middle;
+}

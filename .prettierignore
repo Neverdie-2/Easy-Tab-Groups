@@ -1,0 +1,9 @@
+dist
+coverage
+node_modules
+public/icons
+*.min.js
+package-lock.json
+
+# Canonical, hand-authored specs — preserved exactly as agreed.
+docs/
