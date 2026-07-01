@@ -1,10 +1,15 @@
 :root {
   --etg-bg: #0f1115;
   --etg-panel: #171a21;
+  --etg-panel-2: #1e222c;
   --etg-border: #262b36;
   --etg-text: #e6e8ee;
   --etg-muted: #9aa3b2;
   --etg-accent: #4f46e5;
+  --etg-accent-2: #6366f1;
+  --etg-danger: #b4433f;
+  --etg-danger-2: #e05a55;
+  --etg-ok: #2f9e6f;
   color-scheme: dark;
 }
 
@@ -29,15 +34,31 @@ body {
     sans-serif;
 }
 
+/* --- layout -------------------------------------------------------------- */
+
 .etg-app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
+.etg-app--loading {
+  align-items: center;
+  justify-content: center;
+  color: var(--etg-muted);
+}
+
 .etg-header {
-  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--etg-border);
+}
+
+.etg-header__titles {
+  flex: 0 0 auto;
 }
 
 .etg-title {
@@ -46,9 +67,9 @@ body {
 }
 
 .etg-tagline {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--etg-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .etg-panes {
@@ -57,25 +78,695 @@ body {
   grid-template-columns: 1fr 1fr;
   gap: 1px;
   background: var(--etg-border);
+  min-height: 0;
 }
 
 .etg-pane {
   background: var(--etg-panel);
-  padding: 16px 20px;
+  padding: 14px 16px;
   overflow: auto;
+  min-height: 0;
+}
+
+.etg-pane__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.etg-pane__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .etg-pane__title {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.etg-pane__hint {
-  margin: 0;
+.etg-count {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--etg-panel-2);
+  color: var(--etg-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* --- toolbar ------------------------------------------------------------- */
+
+.etg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.etg-toolbar__spacer {
+  flex: 1;
+}
+
+.etg-toolbar__stats {
+  color: var(--etg-muted);
+  font-size: 12px;
+}
+
+.etg-toolbar__busy {
+  color: var(--etg-accent-2);
+  font-size: 12px;
+}
+
+.etg-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(47, 158, 111, 0.15);
+  color: #7fd8ac;
+  border: 1px solid rgba(47, 158, 111, 0.4);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.etg-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 20px;
+  background: var(--etg-panel-2);
+  border-bottom: 1px solid var(--etg-border);
+  color: var(--etg-text);
+  font-size: 13px;
+}
+
+/* --- controls ------------------------------------------------------------ */
+
+.etg-btn {
+  appearance: none;
+  border: 1px solid var(--etg-border);
+  background: var(--etg-panel-2);
+  color: var(--etg-text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.etg-btn:hover:not(:disabled) {
+  border-color: var(--etg-accent-2);
+}
+
+.etg-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.etg-btn--primary {
+  background: var(--etg-accent);
+  border-color: var(--etg-accent);
+  color: #fff;
+}
+
+.etg-btn--danger {
+  color: var(--etg-danger-2);
+  border-color: rgba(180, 67, 63, 0.5);
+}
+
+.etg-btn--danger:hover:not(:disabled) {
+  background: rgba(180, 67, 63, 0.15);
+  border-color: var(--etg-danger-2);
+}
+
+.etg-btn--sm {
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
+.etg-btn--icon {
+  padding: 2px 8px;
+  font-size: 16px;
+  line-height: 1;
+  background: transparent;
+  border-color: transparent;
+}
+
+.etg-input {
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--etg-border);
+  background: var(--etg-bg);
+  color: var(--etg-text);
+  font-size: 13px;
+}
+
+.etg-input:focus {
+  outline: none;
+  border-color: var(--etg-accent-2);
+}
+
+.etg-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--etg-muted);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.etg-check--sm {
+  font-size: 12px;
+}
+
+.etg-error {
+  margin: 8px 0 0;
+  color: var(--etg-danger-2);
+  font-size: 13px;
+}
+
+/* --- inbox pane ---------------------------------------------------------- */
+
+.etg-inbox__filter {
+  margin-bottom: 8px;
+}
+
+.etg-inbox__selbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  margin-bottom: 8px;
+  background: var(--etg-panel-2);
+  border: 1px solid var(--etg-border);
+  border-radius: 8px;
+}
+
+.etg-inbox__selcount {
+  color: var(--etg-muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+
+.etg-inbox__more,
+.etg-folder__more {
+  padding: 6px 0;
+}
+
+.etg-window {
+  margin-bottom: 12px;
+}
+
+.etg-window__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  position: sticky;
+  top: 0;
+  background: var(--etg-panel);
+  z-index: 1;
+}
+
+.etg-window__title {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--etg-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* --- tab rows ------------------------------------------------------------ */
+
+.etg-tabrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 6px;
+}
+
+.etg-tabrow:hover {
+  background: var(--etg-panel-2);
+}
+
+.etg-tabrow--draggable {
+  cursor: grab;
+}
+
+.etg-tabrow__check {
+  flex: 0 0 auto;
+}
+
+.etg-tabrow__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.etg-tabrow__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.etg-tabrow__url {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
   color: var(--etg-muted);
 }
 
+.etg-tabrow__sub {
+  font-size: 11px;
+  color: var(--etg-accent-2);
+}
+
+.etg-tabrow__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
 .etg-favicon {
+  flex: 0 0 auto;
   border-radius: 3px;
   vertical-align: middle;
+}
+
+.etg-favicon--chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* --- empty states -------------------------------------------------------- */
+
+.etg-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--etg-muted);
+}
+
+.etg-empty__icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.etg-empty__title {
+  font-size: 15px;
+  color: var(--etg-text);
+  margin-bottom: 4px;
+}
+
+.etg-empty__hint {
+  margin: 0 auto;
+  max-width: 340px;
+  font-size: 13px;
+}
+
+.etg-empty__action {
+  margin-top: 12px;
+}
+
+/* --- search -------------------------------------------------------------- */
+
+.etg-searchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.etg-searchbar__input {
+  flex: 1;
+}
+
+.etg-searchbar__count {
+  color: var(--etg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.etg-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --- folder tree --------------------------------------------------------- */
+
+.etg-tree,
+.etg-folder__children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.etg-tree__addroot,
+.etg-folder__add,
+.etg-picker__new {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.etg-folder__add {
+  padding-right: 6px;
+}
+
+.etg-folder__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.etg-folder__row:hover {
+  background: var(--etg-panel-2);
+}
+
+.etg-folder__row--drop {
+  outline: 2px dashed var(--etg-accent-2);
+  outline-offset: -2px;
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.etg-folder__caret {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--etg-muted);
+  cursor: pointer;
+  width: 18px;
+  font-size: 12px;
+  padding: 0;
+}
+
+.etg-folder__icon {
+  flex: 0 0 auto;
+}
+
+.etg-folder__name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: grab;
+  font-size: 13px;
+}
+
+.etg-folder__edit {
+  flex: 1;
+}
+
+.etg-folder__count {
+  flex: 0 0 auto;
+  color: var(--etg-muted);
+  font-size: 11px;
+  min-width: 16px;
+  text-align: right;
+}
+
+.etg-folder__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0.35;
+  transition: opacity 0.1s;
+}
+
+.etg-folder__row:hover .etg-folder__actions {
+  opacity: 1;
+}
+
+.etg-folder__leaf:hover {
+  background: var(--etg-panel-2);
+  border-radius: 6px;
+}
+
+.etg-tree__rootdrop {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--etg-border);
+  border-radius: 8px;
+  text-align: center;
+  color: var(--etg-muted);
+  font-size: 12px;
+}
+
+.etg-tree__rootdrop--active {
+  border-color: var(--etg-accent-2);
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--etg-text);
+}
+
+/* --- modal --------------------------------------------------------------- */
+
+.etg-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  overflow: auto;
+  z-index: 100;
+}
+
+.etg-modal {
+  width: 100%;
+  max-width: 480px;
+  background: var(--etg-panel);
+  border: 1px solid var(--etg-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.etg-modal--wide {
+  max-width: 720px;
+}
+
+.etg-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--etg-border);
+}
+
+.etg-modal__title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.etg-modal__body {
+  padding: 16px;
+}
+
+.etg-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* --- move picker --------------------------------------------------------- */
+
+.etg-picker__list {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--etg-border);
+  border-radius: 8px;
+}
+
+.etg-picker__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--etg-text);
+  padding: 7px 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.etg-picker__item:hover {
+  background: var(--etg-panel-2);
+}
+
+.etg-picker__empty {
+  padding: 12px;
+  color: var(--etg-muted);
+  text-align: center;
+}
+
+/* --- dedupe -------------------------------------------------------------- */
+
+.etg-dedupe__opts {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.etg-dedupe__summary {
+  margin: 0 0 8px;
+  color: var(--etg-muted);
+  font-size: 13px;
+}
+
+.etg-dedupe__groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.etg-dedupe__group {
+  border: 1px solid var(--etg-border);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+}
+
+.etg-dedupe__key {
+  font-size: 12px;
+  color: var(--etg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+
+.etg-dedupe__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+
+.etg-dedupe__row--keep {
+  color: var(--etg-muted);
+}
+
+.etg-dedupe__badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--etg-panel-2);
+}
+
+.etg-dedupe__row--keep .etg-dedupe__badge {
+  background: rgba(47, 158, 111, 0.2);
+  color: #7fd8ac;
+}
+
+.etg-dedupe__title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.etg-dedupe__path {
+  flex: 0 0 auto;
+  color: var(--etg-accent-2);
+  font-size: 11px;
+}
+
+/* --- export / import ----------------------------------------------------- */
+
+.etg-io__section {
+  margin-bottom: 20px;
+}
+
+.etg-io__title {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.etg-io__hint {
+  margin: 0 0 8px;
+  color: var(--etg-muted);
+  font-size: 13px;
+}
+
+.etg-io__row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.etg-io__confirm {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--etg-panel-2);
+  border-radius: 8px;
+}
+
+.etg-io__file {
+  font-size: 13px;
+  color: var(--etg-muted);
+}
+
+/* --- first-run intro ----------------------------------------------------- */
+
+.etg-intro__lead {
+  margin-top: 0;
+  color: var(--etg-text);
+}
+
+.etg-intro__steps {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  color: var(--etg-muted);
+}
+
+.etg-intro__steps li {
+  margin-bottom: 6px;
+}
+
+.etg-intro__steps strong {
+  color: var(--etg-text);
+}
+
+.etg-intro__privacy {
+  padding: 12px;
+  background: rgba(47, 158, 111, 0.12);
+  border: 1px solid rgba(47, 158, 111, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
 }
