@@ -1,0 +1,8 @@
+#!/bin/sh
+# Local CI replacement — runs the full verification suite before every push.
+# Auto-enabled by `npm install` (the package.json "prepare" script points
+# core.hooksPath at this directory). No cloud CI: verification is local & free.
+#
+# Emergency bypass (skips these checks):  git push --no-verify
+echo "▶ pre-push: running full verification (npm run verify)…"
+npm run verify

@@ -85,7 +85,8 @@ Two panes:
 ### 7.1 Zero network at runtime
 No `fetch` / `XMLHttpRequest` / `WebSocket` / `navigator.sendBeacon` / remote
 imports / remote `<img>` anywhere in shipped runtime code. **Everything is
-local.** CI enforces this with a no-network guard (see PLAN).
+local.** A no-network guard enforces this, run locally on every push via a git
+pre-push hook (see PLAN).
 
 ### 7.2 Favicons from the local cache only
 Favicons must come from the browser's **local favicon cache** via the MV3
@@ -124,7 +125,7 @@ Saved titles/URLs are untrusted. Render with `textContent` / safe DOM APIs.
 - Capturing ~1,000 open tabs and filing them stays responsive.
 - Reopening a folder reliably lands its tabs in one correctly-named native
   group.
-- The CI no-network guard passes and would **fail** if any networking primitive
+- The no-network guard passes and would **fail** if any networking primitive
   were introduced.
 - A security-minded auditor can read the manifest + source in minutes and
   confirm the extension cannot exfiltrate anything.

@@ -28,9 +28,11 @@ This is the whole point of the project, not a footnote:
 
 - **Zero network at runtime.** No `fetch`, `XMLHttpRequest`, `WebSocket`,
   `navigator.sendBeacon`, remote imports, or remote `<img>` anywhere in the
-  shipped runtime. Everything is local. CI enforces this with a
-  [no-network guard](scripts/no-network-guard.mjs) that scans both the source
-  **and** the built bundle and fails the build on any networking primitive.
+  shipped runtime. Everything is local. A
+  [no-network guard](scripts/no-network-guard.mjs) enforces this — it scans both
+  the source **and** the built bundle and fails on any networking primitive, and
+  it runs automatically before every push via a local git pre-push hook
+  (`npm run verify`). No cloud CI, by design.
 - **Minimal permissions only:**
   `["tabs", "tabGroups", "storage", "unlimitedStorage", "favicon"]`.
   **No** `host_permissions`, **no** `<all_urls>`, **no** `content_scripts`,

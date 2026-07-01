@@ -17,8 +17,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   build time.
 - `scripts/no-network-guard.mjs`: authoritative zero-network gate that scans
   both source and the built bundle and re-validates the emitted manifest.
-- GitHub Actions CI (`.github/workflows/ci.yml`): install, typecheck, lint,
-  format check, test, build, and the no-network guard.
+- Local verification via `npm run verify` (typecheck, lint, format check, test,
+  build, and the no-network guard), wired to a git **pre-push hook** that runs
+  it automatically before every push. No cloud CI — verification is local, free,
+  and offline.
 - Source skeleton: pure `src/core/**`, `src/platform/**` edges,
   `src/background/service-worker.ts`, and the `src/dashboard/**` Preact shell —
   placeholder modules with the interfaces defined in `docs/PLAN.md`.

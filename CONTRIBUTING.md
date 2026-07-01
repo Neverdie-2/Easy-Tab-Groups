@@ -36,7 +36,12 @@ npm run build
 npm run guard:network
 ```
 
-All of the above must be green before you push. CI runs the same steps.
+All of the above must be green before you push. `npm run verify` runs them as a
+single command, and a git **pre-push hook** — auto-installed by `npm install`
+(via the `prepare` script, which points `core.hooksPath` at `.githooks/`) — runs
+`npm run verify` for you automatically on every `git push`. This project has **no
+cloud CI by design**: verification is local, free, and offline. (Emergency
+bypass: `git push --no-verify`.)
 
 ## Tests
 
