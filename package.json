@@ -17,6 +17,15 @@
   ],
   "type": "module",
   "license": "MIT",
+  "author": "Neverdie-2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Neverdie-2/Easy-Tab-Groups.git"
+  },
+  "homepage": "https://github.com/Neverdie-2/Easy-Tab-Groups#readme",
+  "bugs": {
+    "url": "https://github.com/Neverdie-2/Easy-Tab-Groups/issues"
+  },
   "engines": {
     "node": ">=20"
   },

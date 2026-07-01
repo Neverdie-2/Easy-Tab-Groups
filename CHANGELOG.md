@@ -129,4 +129,4 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dead, unreferenced exports `reorderTab` (core/tree) and `orderBetween`
   (core/ids), which shipped nothing but inflated the reported core coverage.
 
-[Unreleased]: https://example.com/easy-tab-groups/compare/HEAD
+[Unreleased]: https://github.com/Neverdie-2/Easy-Tab-Groups/commits/main
