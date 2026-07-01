@@ -124,6 +124,48 @@ describe('toJson / fromJson', () => {
       ),
     ).toThrow(/folders\[0\]\.id/);
   });
+
+  it('rejects a self-parented folder (would stack-overflow the renderer)', () => {
+    expect(() =>
+      fromJson(
+        JSON.stringify({
+          version: 1,
+          folders: [
+            { id: 'a', name: 'A', parentId: 'a', order: 1000, createdAt: 0 },
+          ],
+          tabs: [],
+        }),
+      ),
+    ).toThrow(/parent cycle/);
+  });
+
+  it('rejects a parent cycle (A->B->A)', () => {
+    expect(() =>
+      fromJson(
+        JSON.stringify({
+          version: 1,
+          folders: [
+            { id: 'a', name: 'A', parentId: 'b', order: 1000, createdAt: 0 },
+            { id: 'b', name: 'B', parentId: 'a', order: 2000, createdAt: 0 },
+          ],
+          tabs: [],
+        }),
+      ),
+    ).toThrow(/parent cycle/);
+  });
+
+  it('accepts an orphan whose parent is simply absent (merge may resolve it)', () => {
+    const restored = fromJson(
+      JSON.stringify({
+        version: 1,
+        folders: [
+          { id: 'a', name: 'A', parentId: 'ghost', order: 1000, createdAt: 0 },
+        ],
+        tabs: [],
+      }),
+    );
+    expect(restored.folders[0].parentId).toBe('ghost');
+  });
 });
 
 describe('toBookmarksHtml', () => {

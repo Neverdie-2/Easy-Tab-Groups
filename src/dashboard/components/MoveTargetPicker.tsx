@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'preact/hooks';
 import { Modal } from './Modal';
-import { folderPath } from '../../core/tree';
+import { folderPathParts } from '../../core/tree';
 import type { Folder, FolderId } from '../../core/types';
 
 export interface MoveTargetPickerProps {
@@ -41,8 +41,10 @@ export function MoveTargetPicker({
   const options = useMemo<Option[]>(() => {
     return folders
       .map((f) => {
-        const path = folderPath(f.id, folders);
-        return { id: f.id, path, depth: path.split(' / ').length - 1 };
+        // Depth from the real ancestor chain, NOT a split of the joined path
+        // string (a folder name containing " / " would otherwise inflate it).
+        const parts = folderPathParts(f.id, folders);
+        return { id: f.id, path: parts.join(' / '), depth: parts.length - 1 };
       })
       .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   }, [folders]);

@@ -23,6 +23,8 @@ export interface CaptureResult {
 export interface ReopenResult {
   groupId: number;
   tabIds: number[];
+  /** How many planned urls could not be opened (restricted/invalid scheme). */
+  skipped: number;
 }
 
 export type Response =

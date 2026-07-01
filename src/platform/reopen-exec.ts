@@ -8,12 +8,24 @@
  * injected `ChromeAdapter`, keeping this unit-testable with a fake adapter.
  */
 import type { ReopenPlan } from '../core/reopen';
+import { isReopenableUrl } from '../core/url';
 import type { ChromeAdapter } from './chrome';
 import { TAB_GROUP_COLORS } from './chrome';
 import type { ReopenResult } from './messages';
 
 /** Sentinel `groupId` returned when a plan has no urls (no group is created). */
 export const NO_GROUP = -1;
+
+/**
+ * How many tabs to create before yielding a macrotask back to the event loop.
+ * Keeps a large reopen from monopolising the (single-threaded) service worker so
+ * the browser stays responsive while dozens/hundreds of tabs are spawned.
+ */
+const CREATE_BATCH_SIZE = 10;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 /**
  * Deterministically map a group name to one of the native group colors (FNV-1a
@@ -31,23 +43,48 @@ function pickGroupColor(name: string): string {
 }
 
 /**
- * Creates one background tab per url (in plan order), groups them, and names the
- * native group `plan.groupName` with a stable color. An empty plan is a no-op
- * that creates nothing.
+ * Creates one background tab per url (in plan order), groups the ones that
+ * opened, and names the native group `plan.groupName` with a stable color.
+ *
+ * Resilient by design (never orphans tabs, never bricks a folder):
+ * - Non-http(s) urls (`javascript:`, `chrome://`, `file://`, …) are skipped up
+ *   front — they are unsafe and/or `chrome.tabs.create` rejects them.
+ * - Each create is wrapped in try/catch, so one un-creatable url can never abort
+ *   the whole reopen and strand the tabs that already opened.
+ * - Creates are chunked with an event-loop yield so a large reopen doesn't hang
+ *   the service worker.
+ *
+ * Returns the created tab ids, the group id (or `NO_GROUP` when nothing opened),
+ * and how many urls were skipped so the caller can inform the user.
  */
 export async function executeReopen(
   plan: ReopenPlan,
   adapter: ChromeAdapter,
 ): Promise<ReopenResult> {
   const tabIds: number[] = [];
-  // Sequential so tabs land in the group in the folder's saved order and the
-  // browser is never flooded with a burst of concurrent creates.
+  let skipped = 0;
+  let sinceYield = 0;
+
+  // Sequential so tabs land in the group in the folder's saved order.
   for (const url of plan.urls) {
-    tabIds.push(await adapter.createTab(url, false));
+    if (!isReopenableUrl(url)) {
+      skipped++;
+      continue;
+    }
+    try {
+      tabIds.push(await adapter.createTab(url, false));
+    } catch {
+      // A single un-creatable url must not abort the rest of the reopen.
+      skipped++;
+    }
+    if (++sinceYield >= CREATE_BATCH_SIZE) {
+      sinceYield = 0;
+      await yieldToEventLoop();
+    }
   }
 
   if (tabIds.length === 0) {
-    return { groupId: NO_GROUP, tabIds: [] };
+    return { groupId: NO_GROUP, tabIds: [], skipped };
   }
 
   const groupId = await adapter.groupTabs(tabIds);
@@ -56,5 +93,5 @@ export async function executeReopen(
     plan.groupName,
     pickGroupColor(plan.groupName),
   );
-  return { groupId, tabIds };
+  return { groupId, tabIds, skipped };
 }

@@ -36,13 +36,11 @@ export interface InboxPaneProps {
 
 const RENDER_STEP = 200;
 
-function matchesFilter(tab: LiveTab, q: string): boolean {
-  if (q.length === 0) return true;
-  return (
-    domainOf(tab.url).includes(q) ||
-    tab.url.toLowerCase().includes(q) ||
-    tab.title.toLowerCase().includes(q)
-  );
+interface TabIndexEntry {
+  tab: LiveTab;
+  domain: string;
+  urlLower: string;
+  titleLower: string;
 }
 
 export function InboxPane({
@@ -63,19 +61,37 @@ export function InboxPane({
 
   const q = filter.trim().toLowerCase();
 
-  const filtered = useMemo(
-    () => liveTabs.filter((t) => matchesFilter(t, q)),
-    [liveTabs, q],
+  // Parse each url exactly ONCE per liveTabs change (not per keystroke). Typing
+  // a filter over 1,600+ tabs then only does cheap string `includes`, never
+  // `new URL()`, so the input stays responsive.
+  const index = useMemo<TabIndexEntry[]>(
+    () =>
+      liveTabs.map((tab) => ({
+        tab,
+        domain: domainOf(tab.url),
+        urlLower: tab.url.toLowerCase(),
+        titleLower: tab.title.toLowerCase(),
+      })),
+    [liveTabs],
   );
+
+  const filtered = useMemo(() => {
+    if (q.length === 0) return liveTabs;
+    return index
+      .filter(
+        (e) =>
+          e.domain.includes(q) ||
+          e.urlLower.includes(q) ||
+          e.titleLower.includes(q),
+      )
+      .map((e) => e.tab);
+  }, [liveTabs, index, q]);
 
   const domains = useMemo(() => {
     const set = new Set<string>();
-    for (const t of liveTabs) {
-      const d = domainOf(t.url);
-      if (d) set.add(d);
-    }
+    for (const e of index) if (e.domain) set.add(e.domain);
     return [...set].sort();
-  }, [liveTabs]);
+  }, [index]);
 
   // Group the FILTERED tabs by window, in stable window order.
   const groups = useMemo(() => {

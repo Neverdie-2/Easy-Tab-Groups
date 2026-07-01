@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { domainOf, safeParseUrl } from './url';
+import { domainOf, isReopenableUrl, safeParseUrl } from './url';
 
 describe('safeParseUrl', () => {
   it('parses a valid url into a URL', () => {
@@ -56,6 +56,30 @@ describe('domainOf', () => {
     // A battery of hostile inputs — must never throw.
     for (const bad of ['://', 'http://', ' ', '\n', 'javascript:void(0)']) {
       expect(() => domainOf(bad)).not.toThrow();
+    }
+  });
+});
+
+describe('isReopenableUrl', () => {
+  it('accepts http and https urls', () => {
+    expect(isReopenableUrl('https://opensea.io/x')).toBe(true);
+    expect(isReopenableUrl('http://192.168.0.1:3000/x')).toBe(true);
+    expect(isReopenableUrl('HTTPS://Example.COM')).toBe(true);
+  });
+
+  it('rejects non-web and hostile schemes (and never throws)', () => {
+    for (const bad of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'chrome://extensions',
+      'file:///Users/me/secret.txt',
+      'view-source:https://x.io',
+      'about:blank',
+      'ftp://host/x',
+      '',
+      'not a url',
+    ]) {
+      expect(isReopenableUrl(bad)).toBe(false);
     }
   });
 });

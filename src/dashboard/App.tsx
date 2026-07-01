@@ -9,16 +9,18 @@
  * background service worker via `REOPEN_FOLDER` ("open as native tab group via
  * the runtime").
  */
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { createVaultStorage } from '../core/storage';
 import { createStore } from './state/store';
 import { createChromeAdapter } from '../platform/chrome';
 import type { LiveTab } from '../platform/chrome';
 import { sendMessage } from '../platform/messages';
+import type { ReopenResult } from '../platform/messages';
 import { getPrefs, setPrefs as persistPrefs } from '../platform/prefs';
 import type { Prefs } from '../platform/prefs';
-import { findDuplicates } from '../core/dedupe';
 import type { DedupeOptions } from '../core/dedupe';
+import { collectTabs } from '../core/tree';
+import { isReopenableUrl } from '../core/url';
 import type { FolderId, TabId, VaultSnapshot } from '../core/types';
 import { Toolbar } from './components/Toolbar';
 import { InboxPane } from './panes/InboxPane';
@@ -48,6 +50,16 @@ function useVaultState() {
 
 type Dialog = 'none' | 'dedupe' | 'exportImport';
 
+/**
+ * Above this many tabs, reopening asks for confirmation first. Reopening a huge
+ * folder (or the whole Inbox with include-subfolders) can spawn hundreds/
+ * thousands of live tabs — the exact RAM spike this extension exists to prevent.
+ */
+const REOPEN_CONFIRM_THRESHOLD = 15;
+
+/** Ignore focus-driven live-tab refreshes that arrive within this window (ms). */
+const FOCUS_REFRESH_THROTTLE_MS = 2000;
+
 export function App() {
   const vault = useVaultState();
 
@@ -64,10 +76,20 @@ export function App() {
   const includeSubfolders = prefs?.includeSubfoldersDefault ?? false;
   const dedupeOptions: DedupeOptions = prefs?.dedupe ?? {};
 
-  const duplicateGroups = useMemo(
-    () => findDuplicates(vault.tabs, dedupeOptions),
-    [vault.tabs, dedupeOptions],
-  );
+  const lastRefreshRef = useRef(0);
+
+  // Cheap exact-URL duplicate-GROUP count for the toolbar badge only. No URL
+  // parsing and no dependence on dedupe options, so it stays O(N) on every
+  // vault change; the DedupeDialog does the full options-aware scan when opened.
+  const duplicateCount = useMemo(() => {
+    const seen = new Set<string>();
+    const dups = new Set<string>();
+    for (const t of vault.tabs) {
+      if (seen.has(t.url)) dups.add(t.url);
+      else seen.add(t.url);
+    }
+    return dups.size;
+  }, [vault.tabs]);
 
   // --- lifecycle ---------------------------------------------------------
 
@@ -92,6 +114,7 @@ export function App() {
   }, []);
 
   async function refreshLiveTabs(): Promise<void> {
+    lastRefreshRef.current = Date.now();
     setLiveLoading(true);
     try {
       const all = await adapter.queryAllTabs();
@@ -105,7 +128,13 @@ export function App() {
 
   useEffect(() => {
     void refreshLiveTabs();
-    const onFocus = (): void => void refreshLiveTabs();
+    // Throttle focus-driven refreshes: reopening a folder rapidly steals/returns
+    // focus and each refresh is an O(N) re-query of 1000s of tabs.
+    const onFocus = (): void => {
+      if (Date.now() - lastRefreshRef.current < FOCUS_REFRESH_THROTTLE_MS)
+        return;
+      void refreshLiveTabs();
+    };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, []);
@@ -144,18 +173,47 @@ export function App() {
     closeAfter: boolean,
   ): void {
     run(async () => {
-      const created = await store.captureLiveTabs(live, folderId);
-      if (closeAfter && live.length > 0) {
-        await adapter.closeTabs(live.map((t) => t.id));
+      // Only tabs with a real url get persisted (a still-loading tab can report
+      // an empty url). CLOSE EXACTLY the tabs that were saved — never the raw
+      // selection — so a link can never be closed without first being saved.
+      const savable = live.filter((t) => (t.url ?? '').trim().length > 0);
+      const created = await store.captureLiveTabs(savable, folderId);
+      if (closeAfter && savable.length > 0) {
+        await adapter.closeTabs(savable.map((t) => t.id));
         await refreshLiveTabs();
       }
+      const kept = live.length - savable.length;
+      const keptNote =
+        kept > 0 ? ` (${kept} still loading — kept open, not lost)` : '';
       setStatus(
-        `Filed ${created.length} tab(s)${closeAfter ? ' and closed them' : ''}.`,
+        `Filed ${created.length} tab(s)${
+          closeAfter ? ' and closed them' : ''
+        }${keptNote}.`,
       );
     });
   }
 
   function handleReopen(folderId: FolderId, incSub: boolean): void {
+    // Compute the planned count locally (from the already-loaded vault) so we
+    // can warn before spawning a large number of live tabs.
+    const count = collectTabs(
+      folderId,
+      incSub,
+      vault.folders,
+      vault.tabs,
+    ).length;
+    if (count === 0) {
+      setStatus('That folder has no saved tabs to reopen.');
+      return;
+    }
+    if (
+      count > REOPEN_CONFIRM_THRESHOLD &&
+      !confirm(
+        `Reopen ${count} tabs? Opening this many at once may slow your browser.`,
+      )
+    ) {
+      return;
+    }
     run(async () => {
       const res = await sendMessage({
         type: 'REOPEN_FOLDER',
@@ -164,11 +222,21 @@ export function App() {
       });
       if (!res.ok) throw new Error(res.error);
       await refreshLiveTabs();
-      setStatus('Reopened folder as a native tab group.');
+      const data = res.data as ReopenResult;
+      const opened = data.tabIds.length;
+      setStatus(
+        data.skipped > 0
+          ? `Reopened ${opened} tab(s) as a native group (${data.skipped} could not be opened).`
+          : `Reopened ${opened} tab(s) as a native tab group.`,
+      );
     });
   }
 
   function handleOpenTab(url: string): void {
+    if (!isReopenableUrl(url)) {
+      setStatus('This link can only be opened if it is an http(s) URL.');
+      return;
+    }
     run(async () => {
       await adapter.createTab(url, true);
     });
@@ -255,7 +323,7 @@ export function App() {
         <Toolbar
           savedCount={vault.tabs.length}
           folderCount={vault.folders.length}
-          duplicateCount={duplicateGroups.length}
+          duplicateCount={duplicateCount}
           busy={busy}
           onOpenDedupe={() => setDialog('dedupe')}
           onOpenExportImport={() => setDialog('exportImport')}

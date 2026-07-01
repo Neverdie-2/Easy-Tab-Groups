@@ -164,6 +164,68 @@ describe('createStore', () => {
     expect(s.folders.some((f) => f.id === INBOX_ID)).toBe(true);
   });
 
+  it('importSnapshot(merge) re-homes tabs/folders that reference a missing folder', async () => {
+    const store = createStore(storage);
+    await store.load();
+
+    await store.importSnapshot(
+      {
+        version: 1,
+        exportedAt: 0,
+        folders: [
+          // parentId points at a folder that does not exist locally or in the
+          // snapshot -> should be re-homed to the top level (null).
+          { id: 'f', name: 'F', parentId: 'ghost', order: 1000, createdAt: 0 },
+        ],
+        tabs: [
+          // folderId points at a missing folder -> should land in the Inbox and
+          // therefore remain VISIBLE (not dropped from the tree view).
+          {
+            id: 'orphan',
+            url: 'https://kept.io',
+            title: 'Kept',
+            savedAt: 0,
+            folderId: 'no-such-folder',
+            order: 1000,
+          },
+        ],
+      },
+      'merge',
+    );
+
+    const s = store.getState();
+    expect(s.folders.find((f) => f.id === 'f')?.parentId).toBeNull();
+    const orphan = s.tabs.find((t) => t.id === 'orphan');
+    expect(orphan?.folderId).toBe(INBOX_ID);
+  });
+
+  it('serializes concurrent mutations so tab orders never collide', async () => {
+    const store = createStore(storage);
+    await store.load();
+    const fid = await store.createFolder('F', null);
+    // Two captures into the SAME folder dispatched WITHOUT awaiting the first.
+    // Pre-serialization both would read base order 0 and assign identical
+    // orders; the internal queue makes the second read post-reload state.
+    const [a, b] = await Promise.all([
+      store.captureLiveTabs(
+        [live(1, 'https://a.io'), live(2, 'https://b.io')],
+        fid,
+      ),
+      store.captureLiveTabs(
+        [live(3, 'https://c.io'), live(4, 'https://d.io')],
+        fid,
+      ),
+    ]);
+    expect(a).toHaveLength(2);
+    expect(b).toHaveLength(2);
+    const orders = store
+      .getState()
+      .tabs.filter((t) => t.folderId === fid)
+      .map((t) => t.order);
+    expect(orders).toHaveLength(4);
+    expect(new Set(orders).size).toBe(4); // all distinct
+  });
+
   it('unsubscribe stops notifications', async () => {
     const store = createStore(storage);
     await store.load();

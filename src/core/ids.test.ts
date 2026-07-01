@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ORDER_STEP, newId, nextOrder, orderBetween } from './ids';
+import { ORDER_STEP, newId, nextOrder } from './ids';
 
 describe('newId', () => {
   it('returns a unique non-empty string each call', () => {
@@ -24,24 +24,5 @@ describe('nextOrder', () => {
 
   it('works when max is not the last element', () => {
     expect(nextOrder([{ order: 9000 }, { order: 100 }])).toBe(10000);
-  });
-});
-
-describe('orderBetween', () => {
-  it('returns a mid value when both bounds are missing', () => {
-    expect(orderBetween()).toBe(ORDER_STEP);
-  });
-
-  it('prepends one step before when only `after` is given', () => {
-    expect(orderBetween(undefined, 1000)).toBe(0);
-  });
-
-  it('appends one step after when only `before` is given', () => {
-    expect(orderBetween(1000)).toBe(2000);
-  });
-
-  it('returns the midpoint between two bounds', () => {
-    expect(orderBetween(1000, 2000)).toBe(1500);
-    expect(orderBetween(1000, 1001)).toBe(1000.5);
   });
 });

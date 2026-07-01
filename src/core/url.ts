@@ -36,3 +36,18 @@ export function domainOf(url: string): string {
   }
   return scheme;
 }
+
+/**
+ * Scheme allowlist for anything we hand to `chrome.tabs.create`. Only `http`/
+ * `https` are reopenable: this is BOTH a safety control (imported vault JSON is
+ * untrusted, so a poisoned `javascript:`/`data:` url can never reach the tab
+ * sink) AND a resilience control (restricted schemes like `chrome://`,
+ * `file://`, `view-source:` make `chrome.tabs.create` throw). Never throws.
+ */
+export function isReopenableUrl(url: string): boolean {
+  const parsed = safeParseUrl(url);
+  return (
+    parsed !== null &&
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:')
+  );
+}

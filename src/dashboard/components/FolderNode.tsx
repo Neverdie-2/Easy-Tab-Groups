@@ -16,13 +16,16 @@
  */
 import { useState } from 'preact/hooks';
 import { TabRow } from './TabRow';
+import { isDescendant } from '../../core/tree';
 import type { TreeNode } from '../../core/tree';
-import type { FolderId, TabId } from '../../core/types';
+import type { Folder, FolderId, TabId } from '../../core/types';
 
 export type DragPayload =
   { kind: 'folder'; id: FolderId } | { kind: 'tab'; id: TabId };
 
 export interface TreeCallbacks {
+  /** Flat folder list, so a drop target can validate folder moves cheaply. */
+  folders: Folder[];
   includeSubfolders: boolean;
   expanded: Set<FolderId>;
   onToggleExpand: (id: FolderId) => void;
@@ -87,8 +90,25 @@ export function FolderNode({
     setAdding(false);
   }
 
+  // A folder drop is illegal onto itself or any of its own descendants
+  // (tree.moveFolder would throw). `isDescendant` returns true for self too.
+  function isIllegalFolderDrop(payload: DragPayload | null): boolean {
+    return (
+      payload?.kind === 'folder' &&
+      isDescendant(folder.id, payload.id, cb.folders)
+    );
+  }
+
   function onRowDragOver(e: DragEvent): void {
-    if (!cb.dragRef.current) return;
+    const payload = cb.dragRef.current;
+    if (!payload) return;
+    // Don't advertise an illegal drop as valid (no preventDefault, no highlight)
+    // — otherwise the row lights up green and then errors on drop.
+    if (isIllegalFolderDrop(payload)) {
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+      if (cb.dropTargetId === folder.id) cb.setDropTargetId(null);
+      return;
+    }
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     if (cb.dropTargetId !== folder.id) cb.setDropTargetId(folder.id);
@@ -103,9 +123,14 @@ export function FolderNode({
     if (!payload) return;
     if (payload.kind === 'tab') {
       cb.onMoveTabsInto([payload.id], folder.id);
-    } else if (payload.id !== folder.id) {
+    } else if (payload.id !== folder.id && !isIllegalFolderDrop(payload)) {
       cb.onMoveFolder(payload.id, folder.id, APPEND_INDEX);
+    } else {
+      return; // illegal / no-op drop: move nothing and don't expand
     }
+    // Reveal the result: dropping into a COLLAPSED folder otherwise looks like
+    // the item vanished (only the count changes).
+    if (!isOpen) cb.onToggleExpand(folder.id);
   }
 
   const tabsToShow = node.tabs.slice(0, shownTabs);

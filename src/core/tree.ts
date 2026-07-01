@@ -30,9 +30,16 @@ function cmp(a: string, b: string): number {
 }
 
 /**
- * Build the nested view, children & tabs sorted by `order`. Orphans (a folder
- * whose `parentId` points at a folder that is not present) are attached to the
- * top level defensively so nothing silently disappears.
+ * Build the nested view, children & tabs sorted by `order`.
+ *
+ * Cycle- and orphan-safe, so malformed data (e.g. from a hand-edited/imported
+ * vault) can never crash or hide the tree:
+ * - a folder whose parent is missing (or `null`) becomes a root;
+ * - a folder that is its own parent is never made its own child (no infinite
+ *   render recursion);
+ * - a parent-cycle (A→B→A) leaves its members unreachable from any root, so they
+ *   are re-attached at the top level (and detached from their cyclic parent)
+ *   rather than silently disappearing.
  */
 export function buildTree(folders: Folder[], tabs: SavedTab[]): TreeNode[] {
   const nodes = new Map<FolderId, TreeNode>();
@@ -45,12 +52,37 @@ export function buildTree(folders: Folder[], tabs: SavedTab[]): TreeNode[] {
     const node = nodes.get(folder.id)!;
     const parent =
       folder.parentId !== null ? nodes.get(folder.parentId) : undefined;
-    if (parent) {
+    // `parent !== node` guards a self-parent (parentId === own id).
+    if (parent && parent !== node) {
       parent.children.push(node);
     } else {
       // Top level (parentId === null) OR an orphan whose parent is missing.
       roots.push(node);
     }
+  }
+
+  // Promote any node not reachable from a root (a parent-cycle) so nothing is
+  // lost, breaking the cycle by detaching it from its cyclic parent first.
+  const reachable = new Set<TreeNode>();
+  const markFrom = (start: TreeNode): void => {
+    const stack = [start];
+    while (stack.length > 0) {
+      const n = stack.pop()!;
+      if (reachable.has(n)) continue;
+      reachable.add(n);
+      for (const c of n.children) stack.push(c);
+    }
+  };
+  for (const r of roots) markFrom(r);
+  for (const node of nodes.values()) {
+    if (reachable.has(node)) continue;
+    const parent =
+      node.folder.parentId !== null
+        ? nodes.get(node.folder.parentId)
+        : undefined;
+    if (parent) parent.children = parent.children.filter((c) => c !== node);
+    roots.push(node);
+    markFrom(node);
   }
 
   for (const tab of tabs) {
@@ -145,9 +177,11 @@ export function isDescendant(
  * system folder, if the target parent does not exist, or if moving the folder
  * into itself or its own subtree (cycle).
  *
- * The moved folder is inserted at `indexInParent` among its new siblings and
- * the whole new sibling list is re-spaced with `ORDER_STEP`, so the returned
- * array is the target parent's children in their new order.
+ * Pinned system folders (the Inbox) are NEVER part of the re-space: they keep
+ * their slot and `order` and are excluded from the returned change set, so
+ * moving a user folder can never displace or renumber the Inbox. The moved
+ * folder is inserted among the MOVABLE siblings and only those are re-spaced,
+ * always above the highest pinned order so a system folder stays first.
  */
 export function moveFolder(
   folderId: FolderId,
@@ -171,21 +205,32 @@ export function moveFolder(
     }
   }
 
-  const siblings = folders
+  const allSiblings = folders
     .filter((f) => f.parentId === newParentId && f.id !== folderId)
     .sort(byFolderOrder);
+  const systemSibs = allSiblings.filter((f) => f.system);
+  const movable = allSiblings.filter((f) => !f.system);
 
-  const clamped = Math.max(0, Math.min(indexInParent, siblings.length));
+  // The UI index is in full-sibling space (pinned system folders render first),
+  // so shift it into movable space and clamp — a folder can never land before a
+  // pinned system sibling.
+  const insertAt = Math.max(
+    0,
+    Math.min(indexInParent - systemSibs.length, movable.length),
+  );
   const ordered = [
-    ...siblings.slice(0, clamped),
+    ...movable.slice(0, insertAt),
     folder,
-    ...siblings.slice(clamped),
+    ...movable.slice(insertAt),
   ];
+
+  let baseOrder = 0;
+  for (const s of systemSibs) if (s.order > baseOrder) baseOrder = s.order;
 
   return ordered.map((f, i) => ({
     ...f,
     parentId: newParentId,
-    order: (i + 1) * ORDER_STEP,
+    order: baseOrder + (i + 1) * ORDER_STEP,
   }));
 }
 
@@ -240,36 +285,6 @@ export function moveTabs(
 }
 
 /**
- * Reorder a single tab within/into a folder at `index`. Re-spaces the target
- * folder's tabs and returns that folder's tabs in their new order. Throws on
- * an unknown tab id.
- */
-export function reorderTab(
-  tabId: TabId,
-  targetFolderId: FolderId,
-  index: number,
-  tabs: SavedTab[],
-): SavedTab[] {
-  const tab = tabs.find((t) => t.id === tabId);
-  if (!tab) {
-    throw new Error(`Unknown tab: ${tabId}`);
-  }
-
-  const others = tabs
-    .filter((t) => t.folderId === targetFolderId && t.id !== tabId)
-    .sort(byTabOrder);
-
-  const clamped = Math.max(0, Math.min(index, others.length));
-  const ordered = [...others.slice(0, clamped), tab, ...others.slice(clamped)];
-
-  return ordered.map((t, i) => ({
-    ...t,
-    folderId: targetFolderId,
-    order: (i + 1) * ORDER_STEP,
-  }));
-}
-
-/**
  * Tabs to reopen for a folder, in tree order. `includeSubfolders=false` returns
  * only the folder's direct tabs; `true` walks the subtree depth-first
  * (a folder's own tabs first, then each child folder in order).
@@ -312,8 +327,15 @@ export function collectTabs(
   return out;
 }
 
-/** "A / B / C" path from root to the given folder. `''` if not found. */
-export function folderPath(folderId: FolderId, folders: Folder[]): string {
+/**
+ * Ancestor names root-first, e.g. `['A', 'B', 'C']`. `[]` if not found.
+ * Cycle-safe. Callers derive depth from `.length` (NOT by splitting the joined
+ * path string, which breaks when a folder name itself contains " / ").
+ */
+export function folderPathParts(
+  folderId: FolderId,
+  folders: Folder[],
+): string[] {
   const byId = new Map(folders.map((f) => [f.id, f]));
   const names: string[] = [];
   const seen = new Set<FolderId>();
@@ -323,5 +345,10 @@ export function folderPath(folderId: FolderId, folders: Folder[]): string {
     names.push(cur.name);
     cur = cur.parentId !== null ? byId.get(cur.parentId) : undefined;
   }
-  return names.reverse().join(' / ');
+  return names.reverse();
+}
+
+/** "A / B / C" path from root to the given folder. `''` if not found. */
+export function folderPath(folderId: FolderId, folders: Folder[]): string {
+  return folderPathParts(folderId, folders).join(' / ');
 }

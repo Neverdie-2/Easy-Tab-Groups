@@ -107,6 +107,7 @@ export function TreePane(props: TreePaneProps) {
   }
 
   const cb: TreeCallbacks = {
+    folders,
     includeSubfolders,
     expanded,
     onToggleExpand: toggleExpand,

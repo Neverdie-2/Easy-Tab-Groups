@@ -6,11 +6,11 @@ import {
   deleteFolderCascade,
   descendantFolderIds,
   folderPath,
+  folderPathParts,
   isDescendant,
   moveFolder,
   moveTabs,
   renameFolder,
-  reorderTab,
 } from './tree';
 import { INBOX_ID } from './types';
 import type { Folder, SavedTab } from './types';
@@ -100,6 +100,35 @@ describe('buildTree', () => {
 
   it('handles an empty tree', () => {
     expect(buildTree([], [])).toEqual([]);
+  });
+
+  it('does not infinite-loop on a self-parented folder', () => {
+    const folders = [f('a', 'a', 1000)]; // parentId === own id
+    let roots: ReturnType<typeof buildTree> = [];
+    expect(() => {
+      roots = buildTree(folders, [t('t1', 'a', 1000)]);
+    }).not.toThrow();
+    // Surfaced at the top level, and NOT made its own child.
+    expect(roots.map((r) => r.folder.id)).toEqual(['a']);
+    expect(roots[0].children).toEqual([]);
+    expect(roots[0].tabs.map((x) => x.id)).toEqual(['t1']);
+  });
+
+  it('breaks a parent cycle (A<->B) instead of hiding both folders', () => {
+    const folders = [f('a', 'b', 1000), f('b', 'a', 2000)];
+    const tabs = [t('ta', 'a', 1000), t('tb', 'b', 1000)];
+    const roots = buildTree(folders, tabs);
+    // Every folder is still reachable from a root (nothing vanished)...
+    const seen = new Set<string>();
+    const walk = (nodes: typeof roots): void => {
+      for (const n of nodes) {
+        expect(seen.has(n.folder.id)).toBe(false); // ...with no rendered cycle
+        seen.add(n.folder.id);
+        walk(n.children);
+      }
+    };
+    walk(roots);
+    expect([...seen].sort()).toEqual(['a', 'b']);
   });
 });
 
@@ -228,6 +257,30 @@ describe('moveFolder', () => {
     moveFolder('b', null, 0, folders);
     expect(folders).toEqual(snap);
   });
+
+  it('never displaces or renumbers the pinned system Inbox', () => {
+    // Fresh-vault layout: Inbox(order 0, system) then user folder A.
+    const folders = [inbox(), f('a', null, 1000)];
+    // Try to move A to the very top (index 0, before the Inbox).
+    const changed = moveFolder('a', null, 0, folders);
+    // The Inbox is NOT in the change set (its order 0 is never rewritten)...
+    expect(changed.some((c) => c.id === INBOX_ID)).toBe(false);
+    // ...and A is re-spaced ABOVE the pinned Inbox, so it can never sort first.
+    const a = changed.find((c) => c.id === 'a')!;
+    expect(a.order).toBeGreaterThan(0);
+    // After a rebuild the Inbox still renders first.
+    const merged = folders.map((x) => changed.find((c) => c.id === x.id) ?? x);
+    const roots = buildTree(merged, []);
+    expect(roots[0].folder.id).toBe(INBOX_ID);
+  });
+
+  it('keeps a user folder ordered after the Inbox even at index 0', () => {
+    const folders = [inbox(), f('a', null, 1000), f('b', null, 2000)];
+    const changed = moveFolder('b', null, 0, folders);
+    const merged = folders.map((x) => changed.find((c) => c.id === x.id) ?? x);
+    const roots = buildTree(merged, []);
+    expect(roots.map((r) => r.folder.id)).toEqual([INBOX_ID, 'b', 'a']);
+  });
 });
 
 // --- deleteFolderCascade -------------------------------------------------
@@ -303,28 +356,6 @@ describe('moveTabs', () => {
   });
 });
 
-// --- reorderTab ----------------------------------------------------------
-
-describe('reorderTab', () => {
-  it('re-spaces the target folder with the tab at the new index', () => {
-    const tabs = [t('x', 'A', 1000), t('y', 'A', 2000), t('z', 'A', 3000)];
-    const changed = reorderTab('z', 'A', 0, tabs);
-    expect(changed.map((c) => c.id)).toEqual(['z', 'x', 'y']);
-    expect(changed.map((c) => c.order)).toEqual([1000, 2000, 3000]);
-  });
-
-  it('moves a tab into a different folder at an index', () => {
-    const tabs = [t('a', 'A', 1000), t('b', 'B', 1000)];
-    const changed = reorderTab('a', 'B', 0, tabs);
-    expect(changed.map((c) => c.id)).toEqual(['a', 'b']);
-    expect(changed.every((c) => c.folderId === 'B')).toBe(true);
-  });
-
-  it('throws on an unknown tab', () => {
-    expect(() => reorderTab('ghost', 'A', 0, [])).toThrow();
-  });
-});
-
 // --- collectTabs ---------------------------------------------------------
 
 describe('collectTabs', () => {
@@ -376,6 +407,29 @@ describe('folderPath', () => {
 
   it('returns "" for an unknown folder', () => {
     expect(folderPath('ghost', [])).toBe('');
+  });
+});
+
+describe('folderPathParts', () => {
+  it('returns ancestor names root-first as an array', () => {
+    const folders = [
+      f('a', null, 1000, { name: 'A' }),
+      f('b', 'a', 1000, { name: 'B' }),
+      f('c', 'b', 1000, { name: 'C' }),
+    ];
+    expect(folderPathParts('c', folders)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('gives a correct depth even when a name contains " / "', () => {
+    // A single folder named "Docs / Archive" is depth 0 — the joined-string
+    // split would wrongly report depth 1.
+    const folders = [f('a', null, 1000, { name: 'Docs / Archive' })];
+    expect(folderPathParts('a', folders).length - 1).toBe(0);
+    expect(folderPath('a', folders).split(' / ').length - 1).toBe(1); // the bug
+  });
+
+  it('returns [] for an unknown folder', () => {
+    expect(folderPathParts('ghost', [])).toEqual([]);
   });
 });
 

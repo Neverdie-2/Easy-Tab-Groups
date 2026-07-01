@@ -100,7 +100,7 @@ export function ExportImportDialog({
   }
 
   return (
-    <Modal title="Export & import" onClose={onClose}>
+    <Modal title="Export & import" onClose={onClose} dismissOnBackdrop={false}>
       <section class="etg-io__section">
         <h3 class="etg-io__title">Export</h3>
         <p class="etg-io__hint">

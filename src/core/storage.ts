@@ -246,8 +246,31 @@ export function createVaultStorage(
 
     async importSnapshot(snap, mode) {
       const db = await getDb();
-      const folders = snap?.folders ?? [];
-      const tabs = snap?.tabs ?? [];
+      const inputFolders = snap?.folders ?? [];
+      const inputTabs = snap?.tabs ?? [];
+
+      // Every folder id that will exist after this import. Used to re-home any
+      // tab/folder that references a MISSING folder, so imported links can never
+      // become invisible: buildTree drops a tab under an unknown folder from the
+      // view, and the success toast would otherwise over-count them.
+      const validFolderIds = new Set<string>([INBOX_ID]);
+      for (const f of inputFolders) validFolderIds.add(f.id);
+      if (mode === 'merge') {
+        const existing = await readAll<Folder>(FOLDERS);
+        for (const f of existing) validFolderIds.add(f.id);
+      }
+
+      // A folder with an unknown parent → top level; a tab with an unknown
+      // folder → the Inbox. Records that already resolve are left untouched.
+      const folders = inputFolders.map((f) =>
+        f.parentId !== null && !validFolderIds.has(f.parentId)
+          ? { ...f, parentId: null }
+          : f,
+      );
+      const tabs = inputTabs.map((t) =>
+        validFolderIds.has(t.folderId) ? t : { ...t, folderId: INBOX_ID },
+      );
+
       const tx = db.transaction([FOLDERS, TABS], 'readwrite');
       const fStore = tx.objectStore(FOLDERS);
       const tStore = tx.objectStore(TABS);

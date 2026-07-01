@@ -62,5 +62,71 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - README: install steps now name the exact `dist/` build output to load, link
   the manual-QA checklist, and the status note reflects the working build.
+- Reopen-as-group now asks for confirmation before opening more than 15 tabs,
+  reports how many tabs opened (and how many were skipped), and short-circuits
+  when a folder has no saved tabs — protecting against the RAM spike of
+  reopening a huge folder / the whole Inbox with subfolders.
+- Reopening creates tabs in small batches (with an event-loop yield) and only
+  attempts http(s) URLs, so a large reopen never hangs the service worker.
+- Dedupe now pre-checks only same-folder duplicates by default; a copy filed in
+  a different folder is shown but left unchecked (and the count is surfaced), so
+  a careless "Remove" can't delete a deliberately-filed copy elsewhere.
+- Toolbar duplicate badge is derived from a cheap exact-URL pass instead of a
+  full options-aware dedupe scan on every vault mutation.
+- Modal now implements a real focus trap (initial focus, Tab/Shift+Tab cycling,
+  focus restore on close); the Export/Import and Dedupe dialogs no longer close
+  on a stray backdrop click (they hold unsaved work).
+- `package.json` gains `keywords` for discoverability.
+
+### Security
+
+- **Runtime CSP added.** The manifest now ships
+  `content_security_policy.extension_pages` with `connect-src 'none'`, so the
+  browser structurally blocks all network egress from extension pages at
+  runtime — the zero-network guarantee no longer relies only on the build-time
+  text scan. `assertManifestPolicy` and the standalone guard both REQUIRE this
+  directive so it can never be silently dropped.
+- No-network guard hardened: it now also flags WebRTC (`RTCPeerConnection` /
+  `webkitRTCPeerConnection`), `SharedWorker`, and any hard-coded remote URL
+  literal (allowlisting only the benign W3C namespace URIs), and it is now
+  covered by a unit test (`tests/no-network-guard.test.ts`) that proves both the
+  scanner and the manifest policy FAIL on known-bad input.
+- Stored/imported URLs are scheme-checked (`http`/`https` only) before reaching
+  `chrome.tabs.create`, so a poisoned imported vault can't route a
+  `javascript:`/`data:` URL to the tab sink.
+
+### Fixed
+
+- Filing live tabs with "close after" now closes exactly the tabs that were
+  saved. A still-loading tab that momentarily reports no URL is kept open (never
+  closed-without-saving), closing a "never lose a link" gap.
+- Malformed imports can no longer corrupt or white-screen the vault:
+  `fromJson` rejects self-parented folders and parent cycles; `buildTree` is
+  cycle-safe (a self-parent is never made its own child, and cyclic folders are
+  surfaced at the top level instead of vanishing).
+- Merge-import re-homes tabs whose `folderId` is missing to the Inbox (and
+  folders with an unknown `parentId` to the top level), so imported links stay
+  visible instead of silently disappearing from the tree view.
+- `moveFolder` no longer displaces or renumbers the pinned system Inbox when a
+  user folder is moved to the top of the root list.
+- A single un-creatable URL (e.g. `chrome://`, `file://`, `javascript:`) no
+  longer aborts a reopen and strands already-opened tabs; failures are skipped
+  and counted, and the surviving tabs are still grouped + named.
+- Drag-over no longer highlights an illegal folder drop (onto itself or a
+  descendant) as valid; dropping onto a collapsed folder now expands it so the
+  moved item is visible.
+- Store mutations are serialized through an internal queue, so two rapid actions
+  can no longer read stale state and assign colliding `order` values.
+- `MoveTargetPicker` indentation is computed from the real ancestor chain, so a
+  folder name containing `" / "` no longer inflates its displayed depth.
+- Inbox domain/url/title filtering pre-parses each URL once per tab change
+  instead of on every keystroke, removing typing lag with thousands of tabs.
+- Focus-driven live-tab refresh is throttled (and dedupe-render capped) so
+  reopening at scale / large duplicate sets no longer jank-freeze the dashboard.
+
+### Removed
+
+- Dead, unreferenced exports `reorderTab` (core/tree) and `orderBetween`
+  (core/ids), which shipped nothing but inflated the reported core coverage.
 
 [Unreleased]: https://example.com/easy-tab-groups/compare/HEAD

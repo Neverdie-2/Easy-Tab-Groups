@@ -2,9 +2,9 @@
  * ID + fractional-ordering helpers (docs/PLAN.md §3.2). PURE.
  *
  * IDs are opaque strings (`crypto.randomUUID()`), independent of live
- * `chrome.tabs` numeric ids. Ordering uses a coarse integer step so that a
- * new sibling can always be appended (`nextOrder`) and an item can be inserted
- * between two neighbours (`orderBetween`) without renumbering the whole list.
+ * `chrome.tabs` numeric ids. Ordering uses a coarse integer step (`ORDER_STEP`)
+ * so a new sibling can always be appended (`nextOrder`) and inserts have room to
+ * sit between neighbours without renumbering the whole list.
  */
 
 /** Spacing between adjacent order values; leaves room for fractional inserts. */
@@ -23,18 +23,4 @@ export function nextOrder(siblings: { order: number }[]): number {
     if (s.order > max) max = s.order;
   }
   return max + ORDER_STEP;
-}
-
-/**
- * Fractional order that sits between `before` and `after` for inserts.
- * - both missing  -> a single mid value.
- * - only `after`  -> one step before it (prepend).
- * - only `before` -> one step after it (append).
- * - both present  -> their midpoint.
- */
-export function orderBetween(before?: number, after?: number): number {
-  if (before === undefined && after === undefined) return ORDER_STEP;
-  if (before === undefined) return (after as number) - ORDER_STEP;
-  if (after === undefined) return before + ORDER_STEP;
-  return (before + after) / 2;
 }

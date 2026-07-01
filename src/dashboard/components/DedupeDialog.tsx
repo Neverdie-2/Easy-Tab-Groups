@@ -1,7 +1,15 @@
 /**
  * Dedupe finder: groups exact-duplicate URLs (with optional normalization) and
- * offers one-click cleanup. The earliest-saved tab in each group is kept; the
- * rest are pre-checked for removal but every checkbox is user-overridable.
+ * offers one-click cleanup. The earliest-saved tab in each group is kept.
+ *
+ * Safe defaults: only duplicates that share the KEEP tab's folder are pre-
+ * checked. A copy the user deliberately filed into a DIFFERENT folder is shown
+ * but left unchecked, so a careless "Remove" click can't delete a copy from an
+ * unrelated folder. Every checkbox is still user-overridable.
+ *
+ * At scale the rendered group list is capped (like the other lists) so opening
+ * the dialog on thousands of duplicates never jank-freezes the dashboard; the
+ * removable/selected counts are always computed over the FULL set.
  */
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { Modal } from './Modal';
@@ -10,6 +18,8 @@ import { findDuplicates } from '../../core/dedupe';
 import type { DedupeOptions } from '../../core/dedupe';
 import { folderPath } from '../../core/tree';
 import type { Folder, SavedTab, TabId } from '../../core/types';
+
+const GROUP_RENDER_STEP = 200;
 
 export interface DedupeDialogProps {
   tabs: SavedTab[];
@@ -36,14 +46,33 @@ export function DedupeDialog({
     return ids;
   }, [groups]);
 
+  // Pre-checked by default: only removable copies that live in the SAME folder
+  // as the kept tab. Cross-folder copies are deliberate and left unchecked.
+  const sameFolderRemovable = useMemo(() => {
+    const ids = new Set<TabId>();
+    for (const g of groups) {
+      const keepFolder = g.tabs.find((t) => t.id === g.keep)?.folderId;
+      for (const t of g.tabs) {
+        if (t.id !== g.keep && t.folderId === keepFolder) ids.add(t.id);
+      }
+    }
+    return ids;
+  }, [groups]);
+
+  const crossFolderCount = allRemovable.size - sameFolderRemovable.size;
+
   const [selected, setSelected] = useState<Set<TabId>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [shown, setShown] = useState(GROUP_RENDER_STEP);
 
   // Whenever the duplicate set changes (options change / cleanup happened),
-  // default the selection to "remove every duplicate".
+  // default the selection to the SAME-FOLDER duplicates only.
   useEffect(() => {
-    setSelected(new Set(allRemovable));
-  }, [allRemovable]);
+    setSelected(new Set(sameFolderRemovable));
+  }, [sameFolderRemovable]);
+
+  const shownGroups = groups.slice(0, shown);
+  const hiddenGroups = groups.length - shownGroups.length;
 
   const pathOf = (id: string): string => folderPath(id, folders) || 'Inbox';
 
@@ -71,7 +100,12 @@ export function DedupeDialog({
   }
 
   return (
-    <Modal title="Find duplicates" onClose={onClose} wide>
+    <Modal
+      title="Find duplicates"
+      onClose={onClose}
+      wide
+      dismissOnBackdrop={false}
+    >
       <div class="etg-dedupe__opts">
         <label class="etg-check">
           <input
@@ -125,9 +159,12 @@ export function DedupeDialog({
           <p class="etg-dedupe__summary">
             {groups.length} duplicate group{groups.length === 1 ? '' : 's'} ·{' '}
             {allRemovable.size} removable · {selected.size} selected
+            {crossFolderCount > 0
+              ? ` · ${crossFolderCount} in another folder left unchecked`
+              : ''}
           </p>
           <ul class="etg-dedupe__groups">
-            {groups.map((g) => (
+            {shownGroups.map((g) => (
               <li key={g.key} class="etg-dedupe__group">
                 <div class="etg-dedupe__key" title={g.key}>
                   {g.key}
@@ -162,6 +199,18 @@ export function DedupeDialog({
               </li>
             ))}
           </ul>
+          {hiddenGroups > 0 ? (
+            <div class="etg-inbox__more">
+              <button
+                type="button"
+                class="etg-btn etg-btn--sm"
+                onClick={() => setShown((n) => n + GROUP_RENDER_STEP)}
+              >
+                Show more ({hiddenGroups} group{hiddenGroups === 1 ? '' : 's'}{' '}
+                hidden)
+              </button>
+            </div>
+          ) : null}
           <div class="etg-modal__footer">
             <button type="button" class="etg-btn" onClick={onClose}>
               Close

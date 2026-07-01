@@ -32,6 +32,19 @@ export const FORBIDDEN_MANIFEST_KEYS = [
   'optional_permissions',
 ] as const;
 
+/**
+ * Runtime Content-Security-Policy for every extension page (the dashboard, and
+ * later the side panel). `connect-src 'none'` is the load-bearing directive: it
+ * makes the BROWSER structurally refuse every network egress API (XHR, sockets,
+ * server-sent events, beacons and the like) from our pages, so the zero-network
+ * promise is enforced at runtime — not only by the build-time text scan.
+ * `img-src 'self' data:` keeps the local `_favicon/` endpoint and letter-chip
+ * fallbacks working; IndexedDB, chrome.runtime messaging and Blob downloads are
+ * unaffected.
+ */
+export const EXTENSION_PAGES_CSP =
+  "script-src 'self'; object-src 'self'; connect-src 'none'; img-src 'self' data:; base-uri 'none'";
+
 /** Permission strings that are explicitly disallowed even if someone adds them. */
 export const FORBIDDEN_PERMISSIONS = [
   '<all_urls>',
@@ -73,6 +86,9 @@ export const manifest: chrome.runtime.ManifestV3 = {
     128: 'icons/icon128.png',
   },
   permissions: [...ALLOWED_PERMISSIONS],
+  content_security_policy: {
+    extension_pages: EXTENSION_PAGES_CSP,
+  },
 };
 
 /**
@@ -114,5 +130,26 @@ export function assertManifestPolicy(m: Record<string, unknown>): void {
         ].join(', ')}]`,
       );
     }
+  }
+
+  // The runtime CSP must be present and MUST block all network egress. This is
+  // enforced so the browser-level zero-network control can never be silently
+  // dropped by a refactor.
+  const csp = m.content_security_policy;
+  if (typeof csp !== 'object' || csp === null || Array.isArray(csp)) {
+    throw new Error(
+      'manifest policy violation: content_security_policy is missing or not an object',
+    );
+  }
+  const pages = (csp as Record<string, unknown>).extension_pages;
+  if (typeof pages !== 'string') {
+    throw new Error(
+      'manifest policy violation: content_security_policy.extension_pages must be a string',
+    );
+  }
+  if (!/connect-src\s+'none'/.test(pages)) {
+    throw new Error(
+      'manifest policy violation: content_security_policy.extension_pages must include "connect-src \'none\'" (zero-network guarantee)',
+    );
   }
 }

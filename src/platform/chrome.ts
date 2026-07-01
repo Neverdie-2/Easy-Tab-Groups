@@ -53,28 +53,38 @@ export interface ChromeAdapter {
   currentWindowId(): Promise<number>;
 }
 
-function isTabGroupColor(value: string): value is TabGroupColor {
+/** True only for a color chrome.tabGroups.update will accept. Exported for test. */
+export function isTabGroupColor(value: string): value is TabGroupColor {
   return (TAB_GROUP_COLORS as readonly string[]).includes(value);
+}
+
+/**
+ * Map a raw `chrome.tabs.Tab` to our `LiveTab`, or `null` when it can't be
+ * acted on (no numeric id/windowId → can't be reopened/closed/grouped). Pure &
+ * chrome-free so the decision logic is unit-testable.
+ *
+ * NOTE: `favIconUrl` is deliberately NOT read — it is frequently a REMOTE https
+ * URL, and storing/rendering it would violate the zero-network guarantee.
+ * Favicons come from the browser's LOCAL `_favicon/` endpoint instead.
+ */
+export function toLiveTab(tab: chrome.tabs.Tab): LiveTab | null {
+  if (tab.id == null || tab.windowId == null) return null;
+  return {
+    id: tab.id,
+    windowId: tab.windowId,
+    url: tab.url ?? tab.pendingUrl ?? '',
+    title: tab.title ?? '',
+  };
 }
 
 export function createChromeAdapter(): ChromeAdapter {
   return {
     async queryAllTabs(): Promise<LiveTab[]> {
-      // NOTE: we deliberately do NOT read `favIconUrl` here. Favicons come from
-      // the browser's LOCAL cache via the `_favicon/` endpoint (dashboard/
-      // favicon.ts); `favIconUrl` is frequently a REMOTE https URL and storing/
-      // rendering it would violate the zero-network guarantee.
       const tabs = await chrome.tabs.query({});
       const live: LiveTab[] = [];
       for (const tab of tabs) {
-        // Only tabs with a real numeric id can be reopened/closed/grouped.
-        if (tab.id == null || tab.windowId == null) continue;
-        live.push({
-          id: tab.id,
-          windowId: tab.windowId,
-          url: tab.url ?? tab.pendingUrl ?? '',
-          title: tab.title ?? '',
-        });
+        const mapped = toLiveTab(tab);
+        if (mapped) live.push(mapped);
       }
       return live;
     },

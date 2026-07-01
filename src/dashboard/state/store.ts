@@ -90,6 +90,21 @@ export function createStore(storage: VaultStorage): Store {
     notify();
   }
 
+  // Serialize every mutation through one promise chain so each op computes its
+  // read-modify-write plan from POST-reload state. Without this, two operations
+  // dispatched before the first `reload()` completes would both read the same
+  // stale `state` and could assign duplicate/overlapping `order` values. The
+  // chain never dies: a rejected op is isolated so later ops still run.
+  let tail: Promise<unknown> = Promise.resolve();
+  function enqueue<T>(op: () => Promise<T>): Promise<T> {
+    const run = tail.then(op);
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
   return {
     getState() {
       return state;
@@ -102,79 +117,97 @@ export function createStore(storage: VaultStorage): Store {
       };
     },
 
-    async load() {
-      await storage.init();
-      await reload();
+    load() {
+      return enqueue(async () => {
+        await storage.init();
+        await reload();
+      });
     },
 
-    async captureLiveTabs(live, folderId = INBOX_ID) {
-      const savable = live.filter((t) => (t.url ?? '').trim().length > 0);
-      if (savable.length === 0) return [];
-      const now = Date.now();
-      const base = maxTabOrder(state.tabs, folderId);
-      const created: SavedTab[] = savable.map((t, i) => ({
-        id: newId(),
-        url: t.url,
-        title: t.title,
-        savedAt: now,
-        folderId,
-        order: base + (i + 1) * ORDER_STEP,
-      }));
-      await storage.putTabs(created);
-      await reload();
-      return created;
+    captureLiveTabs(live, folderId = INBOX_ID) {
+      return enqueue(async () => {
+        const savable = live.filter((t) => (t.url ?? '').trim().length > 0);
+        if (savable.length === 0) return [];
+        const now = Date.now();
+        const base = maxTabOrder(state.tabs, folderId);
+        const created: SavedTab[] = savable.map((t, i) => ({
+          id: newId(),
+          url: t.url,
+          title: t.title,
+          savedAt: now,
+          folderId,
+          order: base + (i + 1) * ORDER_STEP,
+        }));
+        await storage.putTabs(created);
+        await reload();
+        return created;
+      });
     },
 
-    async moveTabsInto(tabIds, folderId) {
-      const changed = planTabMove(tabIds, folderId, state.tabs);
-      if (changed.length === 0) return;
-      await storage.putTabs(changed);
-      await reload();
+    moveTabsInto(tabIds, folderId) {
+      return enqueue(async () => {
+        const changed = planTabMove(tabIds, folderId, state.tabs);
+        if (changed.length === 0) return;
+        await storage.putTabs(changed);
+        await reload();
+      });
     },
 
-    async createFolder(name, parentId) {
-      const siblings = state.folders.filter((f) => f.parentId === parentId);
-      const folder = makeFolder(name, parentId, siblings);
-      await storage.putFolder(folder);
-      await reload();
-      return folder.id;
+    createFolder(name, parentId) {
+      return enqueue(async () => {
+        const siblings = state.folders.filter((f) => f.parentId === parentId);
+        const folder = makeFolder(name, parentId, siblings);
+        await storage.putFolder(folder);
+        await reload();
+        return folder.id;
+      });
     },
 
-    async renameFolder(id, name) {
-      const folder = state.folders.find((f) => f.id === id);
-      if (!folder) throw new Error(`Unknown folder: ${id}`);
-      const renamed = renameFolderRecord(folder, name);
-      await storage.putFolder(renamed);
-      await reload();
+    renameFolder(id, name) {
+      return enqueue(async () => {
+        const folder = state.folders.find((f) => f.id === id);
+        if (!folder) throw new Error(`Unknown folder: ${id}`);
+        const renamed = renameFolderRecord(folder, name);
+        await storage.putFolder(renamed);
+        await reload();
+      });
     },
 
-    async moveFolder(id, parentId, index) {
-      const changed = planFolderMove(id, parentId, index, state.folders);
-      if (changed.length === 0) return;
-      await storage.putFolders(changed);
-      await reload();
+    moveFolder(id, parentId, index) {
+      return enqueue(async () => {
+        const changed = planFolderMove(id, parentId, index, state.folders);
+        if (changed.length === 0) return;
+        await storage.putFolders(changed);
+        await reload();
+      });
     },
 
-    async deleteFolder(id) {
-      const { folderIds, tabIds } = deleteFolderCascade(
-        id,
-        state.folders,
-        state.tabs,
-      );
-      if (tabIds.length > 0) await storage.deleteTabs(tabIds);
-      await storage.deleteFolders(folderIds);
-      await reload();
+    deleteFolder(id) {
+      return enqueue(async () => {
+        const { folderIds, tabIds } = deleteFolderCascade(
+          id,
+          state.folders,
+          state.tabs,
+        );
+        if (tabIds.length > 0) await storage.deleteTabs(tabIds);
+        await storage.deleteFolders(folderIds);
+        await reload();
+      });
     },
 
-    async removeTabs(ids) {
-      if (ids.length === 0) return;
-      await storage.deleteTabs(ids);
-      await reload();
+    removeTabs(ids) {
+      return enqueue(async () => {
+        if (ids.length === 0) return;
+        await storage.deleteTabs(ids);
+        await reload();
+      });
     },
 
-    async importSnapshot(snap, mode) {
-      await storage.importSnapshot(snap, mode);
-      await reload();
+    importSnapshot(snap, mode) {
+      return enqueue(async () => {
+        await storage.importSnapshot(snap, mode);
+        await reload();
+      });
     },
   };
 }

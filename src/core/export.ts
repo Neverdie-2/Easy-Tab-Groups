@@ -105,6 +105,27 @@ function parseTab(raw: unknown, i: number): SavedTab {
 }
 
 /**
+ * Reject structurally-corrupt folder graphs on the untrusted import path: a
+ * folder that is its own parent, or any parent cycle (A→B→A). Both would break
+ * the tree ("never corrupt the vault"), and a self-parent would stack-overflow
+ * the recursive renderer. Unknown parents (orphans pointing outside the
+ * snapshot) are NOT rejected here — a merge legitimately references existing
+ * local folders, and buildTree/storage re-home genuine orphans.
+ */
+function assertNoFolderCycles(folders: Folder[]): void {
+  const byId = new Map<string, Folder>(folders.map((f) => [f.id, f]));
+  for (const start of folders) {
+    const seen = new Set<string>();
+    let cur: Folder | undefined = start;
+    while (cur) {
+      assert(!seen.has(cur.id), `folder "${cur.id}" is part of a parent cycle`);
+      seen.add(cur.id);
+      cur = cur.parentId !== null ? byId.get(cur.parentId) : undefined;
+    }
+  }
+}
+
+/**
  * Parse + validate an exported snapshot. Throws a descriptive `Error` on any
  * malformed input or an unsupported `version` (no silent, partial imports —
  * see the plan's "never lose a link / never corrupt the vault" posture).
@@ -130,6 +151,7 @@ export function fromJson(text: string): VaultSnapshot {
 
   const folders = parsed.folders.map((f, i) => parseFolder(f, i));
   const tabs = parsed.tabs.map((t, i) => parseTab(t, i));
+  assertNoFolderCycles(folders);
   const exportedAt =
     typeof parsed.exportedAt === 'number' ? parsed.exportedAt : Date.now();
 

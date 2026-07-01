@@ -3,6 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-only tab rescue + nested organizer for Brave / Chromium (Manifest V3). Zero network. Cannot read your pages.",
+  "keywords": [
+    "tabs",
+    "tab-manager",
+    "tab-groups",
+    "browser-extension",
+    "manifest-v3",
+    "chromium",
+    "brave",
+    "privacy",
+    "local-first",
+    "zero-network"
+  ],
   "type": "module",
   "license": "MIT",
   "engines": {
