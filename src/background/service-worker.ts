@@ -3,57 +3,104 @@
  *
  * Responsibilities:
  *   - `chrome.action.onClicked` -> open/focus the full-page dashboard.
- *   - message router for privileged actions (CAPTURE/REOPEN/CLOSE).
+ *   - Typed message router (via `platform/messages.onMessage`) for the
+ *     privileged `chrome.*` actions any surface (dashboard now, side panel
+ *     later) can request:
+ *       OPEN_DASHBOARD  -> focus/create the dashboard page
+ *       CAPTURE_TABS    -> read all live tabs (id/url/title/windowId)
+ *       REOPEN_FOLDER   -> plan + open a folder as a native tab group
+ *       CLOSE_TABS      -> close tabs (caller persists FIRST; see below)
  *
- * It NEVER writes IndexedDB (single-writer = the dashboard page). The routing
- * for CAPTURE/REOPEN/CLOSE is wired in later phases; this scaffold implements
- * OPEN_DASHBOARD so the extension is loadable from `dist/` immediately.
+ * Single-writer rule: the SW NEVER writes the IndexedDB vault (the dashboard is
+ * the only writer, avoiding MV3 ephemeral-SW write races). For REOPEN_FOLDER it
+ * only READS the vault (folders + tabs) to build the reopen plan.
+ *
+ * Never-lose-a-link rule: CLOSE_TABS only closes tabs. The vault copy must
+ * already be persisted by the caller before a close is requested — closing is a
+ * deliberate, separate step from saving, so a link can never be lost.
  */
-import type { Message, Response } from '../platform/messages';
+import { createChromeAdapter } from '../platform/chrome';
+import { executeReopen } from '../platform/reopen-exec';
+import { onMessage } from '../platform/messages';
+import type {
+  CaptureResult,
+  Message,
+  ReopenResult,
+  Response,
+} from '../platform/messages';
+import { setPrefs } from '../platform/prefs';
+import { planReopen } from '../core/reopen';
+import { createVaultStorage } from '../core/storage';
+import type { VaultStorage } from '../core/storage';
+import type { FolderId } from '../core/types';
 
-const DASHBOARD_PAGE = 'dashboard.html';
+const adapter = createChromeAdapter();
 
-/** Focus an existing dashboard tab if present, otherwise create one. */
-async function openDashboard(): Promise<void> {
-  const url = chrome.runtime.getURL(DASHBOARD_PAGE);
-  const existing = await chrome.tabs.query({ url });
-  const first = existing[0];
-  if (first?.id != null) {
-    await chrome.tabs.update(first.id, { active: true });
-    if (first.windowId != null) {
-      await chrome.windows.update(first.windowId, { focused: true });
-    }
-    return;
-  }
-  await chrome.tabs.create({ url });
+/**
+ * Lazy, read-only vault handle for reopen planning. Created on first use and
+ * reused while the SW lives. Only `getAllFolders`/`getAllTabs` are ever called
+ * on it — no writes.
+ */
+let vault: VaultStorage | null = null;
+function getVault(): VaultStorage {
+  if (!vault) vault = createVaultStorage();
+  return vault;
+}
+
+async function reopenFolder(
+  folderId: FolderId,
+  includeSubfolders: boolean,
+): Promise<ReopenResult> {
+  const storage = getVault();
+  const [folders, tabs] = await Promise.all([
+    storage.getAllFolders(),
+    storage.getAllTabs(),
+  ]);
+  const plan = planReopen(folderId, includeSubfolders, folders, tabs);
+  return executeReopen(plan, adapter);
 }
 
 async function handleMessage(message: Message): Promise<Response> {
   switch (message.type) {
     case 'OPEN_DASHBOARD':
-      await openDashboard();
+      await adapter.openDashboard();
       return { ok: true, data: null };
-    case 'CAPTURE_TABS':
-    case 'REOPEN_FOLDER':
+
+    case 'CAPTURE_TABS': {
+      const tabs = await adapter.queryAllTabs();
+      return { ok: true, data: { tabs } satisfies CaptureResult };
+    }
+
+    case 'REOPEN_FOLDER': {
+      const result = await reopenFolder(
+        message.folderId,
+        message.includeSubfolders,
+      );
+      return { ok: true, data: result satisfies ReopenResult };
+    }
+
     case 'CLOSE_TABS':
-      return { ok: false, error: `not implemented: ${message.type}` };
+      await adapter.closeTabs(message.tabIds);
+      return { ok: true, data: { closed: message.tabIds.length } };
+
     default:
       return { ok: false, error: 'unknown message' };
   }
 }
 
+// Toolbar icon click -> full-page dashboard (there is no popup).
 chrome.action.onClicked.addListener(() => {
-  void openDashboard();
+  void adapter.openDashboard();
 });
 
-chrome.runtime.onMessage.addListener(
-  (message: Message, _sender, sendResponse) => {
-    handleMessage(message)
-      .then(sendResponse)
-      .catch((err: unknown) => {
-        sendResponse({ ok: false, error: String(err) } satisfies Response);
-      });
-    // Keep the message channel open for the async response.
-    return true;
-  },
-);
+// Seed default prefs on first install so the first-run intro has something to
+// key off. (chrome.storage.local, not the IndexedDB vault.)
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    void setPrefs({});
+  }
+});
+
+// The single typed message router. Registered synchronously at top level as MV3
+// requires.
+onMessage(handleMessage);
