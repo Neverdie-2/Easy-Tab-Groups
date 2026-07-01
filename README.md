@@ -7,8 +7,12 @@ unlimited nested folder tree → close to free RAM → reopen on demand as a nat
 Brave tab group.** The deep hierarchy is your _librarian_; native tab groups are
 your _workbench_.
 
-> Status: early scaffold. See [`docs/DESIGN.md`](docs/DESIGN.md) for the product
-> spec and [`docs/PLAN.md`](docs/PLAN.md) for the engineering build contract.
+> Status: working MV3 build — the full-page two-pane dashboard, background
+> service worker, and IndexedDB vault are wired end-to-end. See
+> [`docs/DESIGN.md`](docs/DESIGN.md) for the product spec,
+> [`docs/PLAN.md`](docs/PLAN.md) for the engineering build contract, and
+> [`docs/MANUAL-QA.md`](docs/MANUAL-QA.md) for the hands-on verification
+> checklist.
 
 ---
 
@@ -63,15 +67,22 @@ confirm the extension cannot exfiltrate anything.
 > Not yet published to a store. Run it locally:
 
 1. `npm install`
-2. `npm run build` — outputs the extension to `dist/`.
+2. `npm run build` — outputs the loadable extension to **`dist/`** (emits
+   `dist/manifest.json`, `dist/service-worker.js`, `dist/dashboard.html`,
+   hashed `dist/assets/*`, and `dist/icons/*`). `dist/` is git-ignored and
+   regenerated on every build.
 3. Open `brave://extensions` (or `chrome://extensions`).
 4. Enable **Developer mode**.
-5. Click **Load unpacked** and select the `dist/` folder.
-6. Click the toolbar icon to open the full-page dashboard.
+5. Click **Load unpacked** and select the **`dist/`** folder (the one that
+   contains `manifest.json`) — not the repository root.
+6. Click the toolbar icon to open the full-page dashboard in its own tab.
+
+For a full hands-on verification of every feature and the zero-network
+guarantee, follow [`docs/MANUAL-QA.md`](docs/MANUAL-QA.md).
 
 ## Screenshots
 
-_Placeholder — screenshots will be added once the dashboard UI lands._
+_Placeholder — screenshots of the two-pane dashboard will be added here._
 
 <!-- ![Dashboard](docs/screenshots/dashboard.png) -->
 

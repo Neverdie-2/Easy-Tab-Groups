@@ -50,5 +50,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     letter/color favicon chip fallback for the local `_favicon/` endpoint.
   - Added a small shared `dashboard/components/Modal.tsx` primitive (not in the
     original file manifest) to keep the dialogs consistent.
+- Integration pass: `tests/integration.test.ts` — an end-to-end trace of the
+  core loop (capture → file into a nested tree → persist → reopen-as-native-group
+  via a second `VaultStorage` handle that mirrors the background service worker
+  reading the same IndexedDB origin → export/import round-trip), wiring the real
+  storage, store, tree, reopen planner, reopen executor and export modules.
+- `docs/MANUAL-QA.md`: a step-by-step Load-Unpacked checklist for Brave that
+  verifies every feature and the zero-network / privacy guarantees by hand.
+
+### Changed
+
+- README: install steps now name the exact `dist/` build output to load, link
+  the manual-QA checklist, and the status note reflects the working build.
 
 [Unreleased]: https://example.com/easy-tab-groups/compare/HEAD
